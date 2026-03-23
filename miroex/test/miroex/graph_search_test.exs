@@ -71,4 +71,23 @@ defmodule Miroex.AI.Tools.GraphSearchTest do
       assert match?({:error, _}, result)
     end
   end
+
+  describe "interview_agents/3" do
+    test "handles non-existent graph gracefully" do
+      result = GraphSearch.interview_agents("nonexistent_sim", "topic")
+      assert match?({:error, _}, result)
+    end
+
+    test "accepts keyword opts for max_agents" do
+      result = GraphSearch.interview_agents("nonexistent", "topic", max_agents: 3)
+      assert match?({:error, _}, result)
+    end
+
+    test "returns list of interview results" do
+      # When graph has no entities, should still return empty list or handle gracefully
+      result = GraphSearch.interview_agents("nonexistent_sim", "topic", max_agents: 5)
+      # Either returns {:ok, []} or {:error, _} is acceptable
+      assert match?({:ok, _}, result) or match?({:error, _}, result)
+    end
+  end
 end

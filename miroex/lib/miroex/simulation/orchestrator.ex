@@ -223,6 +223,61 @@ defmodule Miroex.Simulation.Orchestrator do
     Environment.create_post(env_pid, agent_state.agent_id, agent_state.name, content)
   end
 
+  defp execute_action(
+         {:ok, %Miroex.Simulation.ActionTypes.LikePost{post_id: post_id}},
+         agent_pid,
+         state
+       ) do
+    if env_pid = state.twitter_env_pid || state.reddit_env_pid do
+      agent_state = Agent.get_state(agent_pid)
+      Environment.like_post(env_pid, agent_state.agent_id, post_id)
+    end
+  end
+
+  defp execute_action(
+         {:ok, %Miroex.Simulation.ActionTypes.CommentPost{post_id: post_id, content: content}},
+         agent_pid,
+         state
+       ) do
+    if env_pid = state.twitter_env_pid || state.reddit_env_pid do
+      agent_state = Agent.get_state(agent_pid)
+      Environment.comment_post(env_pid, agent_state.agent_id, post_id, content)
+    end
+  end
+
+  defp execute_action(
+         {:ok, %Miroex.Simulation.ActionTypes.FollowUser{user_id: target_id}},
+         agent_pid,
+         state
+       ) do
+    if env_pid = state.twitter_env_pid || state.reddit_env_pid do
+      agent_state = Agent.get_state(agent_pid)
+      Environment.follow_user(env_pid, agent_state.agent_id, target_id)
+    end
+  end
+
+  defp execute_action(
+         {:ok, %Miroex.Simulation.ActionTypes.RetweetPost{post_id: post_id, content: content}},
+         agent_pid,
+         state
+       ) do
+    if env_pid = state.twitter_env_pid || state.reddit_env_pid do
+      agent_state = Agent.get_state(agent_pid)
+      Environment.retweet(env_pid, agent_state.agent_id, post_id, content)
+    end
+  end
+
+  defp execute_action(
+         {:ok, %Miroex.Simulation.ActionTypes.ReplyPost{post_id: post_id, content: content}},
+         agent_pid,
+         state
+       ) do
+    if env_pid = state.twitter_env_pid || state.reddit_env_pid do
+      agent_state = Agent.get_state(agent_pid)
+      Environment.comment_post(env_pid, agent_state.agent_id, post_id, content)
+    end
+  end
+
   defp execute_action(_, _, _), do: :ok
 
   defp log_activity_to_memory({:ok, action, _}, agent_pid, state, round) do

@@ -136,4 +136,169 @@ defmodule Miroex.Graph.EntityReader do
       error -> error
     end
   end
+
+  @doc """
+  Get entity with full context: attributes, relations, related entities.
+  This provides the rich context needed for detailed persona generation.
+  """
+  @spec get_entity_with_context(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def get_entity_with_context(graph_id, entity_name) do
+    with {:ok, entity} <- get_entity(graph_id, entity_name),
+         {:ok, relations} <- get_relations_for_entity(graph_id, entity_name),
+         {:ok, related_entities} <- get_related_entity_details(graph_id, relations) do
+      context = build_entity_context(entity, relations, related_entities)
+
+      {:ok,
+       Map.merge(entity, %{
+         relations: relations,
+         related_entities: related_entities,
+         context: context
+       })}
+    end
+  end
+
+  @doc """
+  Get all relations (both incoming and outgoing) for a specific entity.
+  """
+  @spec get_relations_for_entity(String.t(), String.t()) :: {:ok, [map()]} | {:error, term()}
+  def get_relations_for_entity(graph_id, entity_name) do
+    cypher = """
+    MATCH (g:Graph {id: $graph_id})-[:HAS_ENTITY]->(e1:Entity {name: $name})
+    OPTIONAL MATCH (e1)-[r:RELATES]->(e2:Entity)
+    OPTIONAL MATCH (e3:Entity)-[r2:RELATES]->(e1)
+    RETURN 
+      coalesce(e1.name, e2.name, e3.name) as entity,
+      CASE 
+        WHEN e1.name = $name THEN 'outgoing'
+        ELSE 'incoming'
+      END as direction,
+      CASE 
+        WHEN e1.name = $name THEN coalesce(e2.name, '')
+        ELSE coalesce(e3.name, '')
+      END as related_to,
+      CASE 
+        WHEN e1.name = $name THEN type(r)
+        ELSE type(r2)
+      END as relation_type,
+      CASE 
+        WHEN e1.name = $name THEN r.fact
+        ELSE r2.fact
+      END as fact
+    """
+
+    case Memgraph.query(cypher, %{graph_id: graph_id, name: entity_name}) do
+      {:ok, relations} when is_list(relations) ->
+        formatted =
+          relations
+          |> Enum.filter(fn r -> r["related_to"] != "" and r["related_to"] != nil end)
+          |> Enum.map(fn r ->
+            %{
+              direction: String.to_existing_atom(r["direction"]),
+              related_to: r["related_to"],
+              type: r["relation_type"] || "RELATES",
+              fact: r["fact"] || ""
+            }
+          end)
+
+        {:ok, formatted}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Get details for entities related to the given entity.
+  """
+  @spec get_related_entity_details(String.t(), [map()]) :: {:ok, [map()]} | {:error, term()}
+  def get_related_entity_details(_graph_id, relations) when relations == [] or relations == nil do
+    {:ok, []}
+  end
+
+  def get_related_entity_details(graph_id, relations) do
+    related_names =
+      relations
+      |> Enum.map(& &1.related_to)
+      |> Enum.reject(&(&1 == "" or &1 == nil))
+      |> Enum.uniq()
+
+    if related_names == [] do
+      {:ok, []}
+    else
+      cypher = """
+      MATCH (g:Graph {id: $graph_id})-[:HAS_ENTITY]->(e:Entity)
+      WHERE e.name IN $names
+      RETURN e.name as name, e.type as type, e.properties as properties
+      """
+
+      case Memgraph.query(cypher, %{graph_id: graph_id, names: related_names}) do
+        {:ok, entities} -> {:ok, entities}
+        error -> error
+      end
+    end
+  end
+
+  defp build_entity_context(entity, relations, related_entities) do
+    parts = []
+
+    if entity && entity["properties"] do
+      props =
+        case entity["properties"] do
+          properties when is_binary(properties) ->
+            case Jason.decode(properties) do
+              {:ok, p} -> p
+              _ -> %{}
+            end
+
+          p when is_map(p) ->
+            p
+
+          _ ->
+            %{}
+        end
+
+      if props != %{} do
+        attr_parts =
+          props
+          |> Enum.reject(fn {_, v} -> v == nil or v == "" end)
+          |> Enum.map(fn {k, v} -> "#{k}: #{v}" end)
+
+        if attr_parts != [] do
+          parts = parts ++ ["## Attributes\n" <> String.join(attr_parts, "\n")]
+        end
+      end
+    end
+
+    if relations && relations != [] do
+      relation_parts =
+        relations
+        |> Enum.reject(&(&1.fact == "" or &1.fact == nil))
+        |> Enum.map(fn r ->
+          case r.direction do
+            :outgoing -> "#{entity["name"]} --[#{r.type}]--> #{r.related_to}"
+            :incoming -> "#{r.related_to} --[#{r.type}]--> #{entity["name"]}"
+          end
+        end)
+
+      if relation_parts != [] do
+        parts = parts ++ ["## Relations\n" <> String.join(relation_parts, "\n")]
+      end
+    end
+
+    if related_entities && related_entities != [] do
+      entity_parts =
+        related_entities
+        |> Enum.map(fn re ->
+          type_str = if re["type"], do: " (#{re["type"]})", else: ""
+          name_str = if re["name"], do: re["name"], else: ""
+          "#{name_str}#{type_str}"
+        end)
+
+      if entity_parts != [] do
+        parts = parts ++ ["## Related Entities\n" <> String.join(entity_parts, "\n")]
+      end
+    end
+
+    Enum.join(parts, "\n\n")
+  end
 end

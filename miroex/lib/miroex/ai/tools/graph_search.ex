@@ -200,4 +200,110 @@ defmodule Miroex.AI.Tools.GraphSearch do
       types: rel_types
     }
   end
+
+  @doc """
+  Interview agents about a specific topic.
+
+  This function interviews simulation agents to gather their perspectives on a topic.
+  It uses the existing Agent.interview/2 function via the Orchestrator.
+
+  ## Parameters
+    - simulation_id: The simulation ID to find agents
+    - interview_topic: The topic to ask agents about
+    - opts: Optional parameters including :max_agents
+
+  ## Returns
+    {:ok, [%{agent_name, agent_id, platform, response}]} or {:error, reason}
+  """
+  @spec interview_agents(String.t(), String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
+  def interview_agents(simulation_id, interview_topic, opts \\ [])
+      when is_binary(simulation_id) and is_binary(interview_topic) do
+    max_agents = Keyword.get(opts, :max_agents, 5)
+
+    with {:ok, entities} <- EntityReader.get_entities(simulation_id),
+         ranked_agents = score_and_rank_agents(entities, interview_topic),
+         top_agents <- Enum.take(ranked_agents, max_agents),
+         results <- interview_top_agents(top_agents, simulation_id, interview_topic) do
+      {:ok, results}
+    else
+      {:error, reason} ->
+        {:error, reason}
+
+      reason when is_atom(reason) ->
+        {:error, reason}
+    end
+  rescue
+    e ->
+      {:error, "interview_agents failed: #{inspect(e)}"}
+  end
+
+  defp score_and_rank_agents(entities, topic) do
+    topic_lower = String.downcase(topic)
+
+    entities
+    |> Enum.map(fn entity ->
+      name = entity["name"] || ""
+      type = entity["type"] || ""
+
+      name_score = calculate_name_score(name, topic_lower)
+      type_score = calculate_type_score(type, topic_lower)
+
+      %{
+        name: name,
+        type: type,
+        agent_id: abs(String.length(name)),
+        score: name_score + type_score
+      }
+    end)
+    |> Enum.sort_by(& &1.score, {:desc, 0})
+  end
+
+  defp calculate_name_score(name, topic_lower) do
+    name_lower = String.downcase(name)
+
+    cond do
+      name_lower == topic_lower -> 100
+      String.starts_with?(name_lower, topic_lower) -> 80
+      String.contains?(name_lower, topic_lower) -> 60
+      true -> 0
+    end
+  end
+
+  defp calculate_type_score(type, topic_lower) do
+    type_lower = String.downcase(type)
+
+    if String.contains?(type_lower, topic_lower) or String.contains?(topic_lower, type_lower) do
+      30
+    else
+      0
+    end
+  end
+
+  defp interview_top_agents(agents, simulation_id, topic) do
+    agents
+    |> Enum.map(fn agent ->
+      agent_name = agent.name
+      agent_id = agent.agent_id
+
+      response =
+        case Miroex.Simulation.AgentRegistry.lookup(simulation_id, agent_id) do
+          {:ok, agent_pid} ->
+            case Miroex.Simulation.Agent.interview(agent_pid, topic) do
+              {:ok, response} -> response
+              {:error, reason} -> "Unable to interview: #{inspect(reason)}"
+            end
+
+          :error ->
+            "Agent not currently active in simulation"
+        end
+
+      %{
+        agent_name: agent_name,
+        agent_id: agent_id,
+        type: agent.type,
+        topic: topic,
+        response: response
+      }
+    end)
+  end
 end

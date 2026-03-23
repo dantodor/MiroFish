@@ -54,6 +54,105 @@ defmodule Miroex.Reports.ReportLogger do
   end
 
   @doc """
+  Log report planning start.
+  """
+  @spec log_planning_start(String.t(), String.t(), String.t()) :: :ok
+  def log_planning_start(report_id, simulation_id, simulation_requirement) do
+    log_event(report_id, %{
+      type: "planning_start",
+      simulation_id: simulation_id,
+      simulation_requirement: simulation_requirement
+    })
+  end
+
+  @doc """
+  Log outline planning complete.
+  """
+  @spec log_planning_complete(String.t(), map()) :: :ok
+  def log_planning_complete(report_id, outline) do
+    log_event(report_id, %{
+      type: "planning_complete",
+      outline: outline
+    })
+  end
+
+  @doc """
+  Log section generation start.
+  """
+  @spec log_section_start(String.t(), String.t(), non_neg_integer()) :: :ok
+  def log_section_start(report_id, section_title, section_index) do
+    log_event(report_id, %{
+      type: "section_start",
+      section_title: section_title,
+      section_index: section_index
+    })
+  end
+
+  @doc """
+  Log a ReACT thought (LLM reasoning before tool call).
+  """
+  @spec log_react_thought(String.t(), non_neg_integer(), String.t()) :: :ok
+  def log_react_thought(report_id, iteration, thought) do
+    log_event(report_id, %{
+      type: "react_thought",
+      iteration: iteration,
+      thought: String.slice(thought, 0, 2000)
+    })
+  end
+
+  @doc """
+  Log section content generation (partial content during generation).
+  """
+  @spec log_section_content(String.t(), String.t(), non_neg_integer(), String.t()) :: :ok
+  def log_section_content(report_id, section_title, section_index, content) do
+    log_event(report_id, %{
+      type: "section_content",
+      section_title: section_title,
+      section_index: section_index,
+      content: String.slice(content, 0, 10000),
+      content_length: String.length(content)
+    })
+  end
+
+  @doc """
+  Log section generation complete (full content).
+  """
+  @spec log_section_complete(String.t(), String.t(), non_neg_integer(), String.t()) :: :ok
+  def log_section_complete(report_id, section_title, section_index, content) do
+    log_event(report_id, %{
+      type: "section_complete",
+      section_title: section_title,
+      section_index: section_index,
+      content: content,
+      content_length: String.length(content)
+    })
+  end
+
+  @doc """
+  Log report generation complete.
+  """
+  @spec log_report_complete(String.t(), non_neg_integer(), integer()) :: :ok
+  def log_report_complete(report_id, total_sections, duration_ms) do
+    log_event(report_id, %{
+      type: "report_complete",
+      total_sections: total_sections,
+      duration_ms: duration_ms
+    })
+  end
+
+  @doc """
+  Log report generation error.
+  """
+  @spec log_error(String.t(), String.t(), String.t() | nil) :: :ok
+  def log_error(report_id, error_message, section_title \\ nil) do
+    log_event(report_id, %{
+      type: "error",
+      error: error_message,
+      section_title: section_title
+    })
+  end
+
+  @doc """
   Get all log entries for a report.
   """
   @spec get_logs(String.t()) :: {:ok, [map()]} | {:error, term()}
