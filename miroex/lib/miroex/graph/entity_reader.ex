@@ -115,10 +115,81 @@ defmodule Miroex.Graph.EntityReader do
   def get_relations(graph_id) do
     cypher = """
     MATCH (g:Graph {id: $graph_id})-[:HAS_ENTITY]->(e1:Entity)-[r:RELATES]->(e2:Entity)
-    RETURN e1.name as from, e2.name as to, r.type as type
+    RETURN e1.name as from,
+           e2.name as to,
+           r.type as type,
+           r.fact as fact,
+           r.created_at as created_at,
+           r.valid_at as valid_at,
+           r.invalid_at as invalid_at,
+           r.expired_at as expired_at
     """
 
     case Memgraph.query(cypher, %{graph_id: graph_id}) do
+      {:ok, relations} -> {:ok, relations}
+      error -> error
+    end
+  end
+
+  @spec get_active_relations(String.t()) :: {:ok, [map()]} | {:error, term()}
+  def get_active_relations(graph_id) do
+    cypher = """
+    MATCH (g:Graph {id: $graph_id})-[:HAS_ENTITY]->(e1:Entity)-[r:RELATES]->(e2:Entity)
+    WHERE r.invalid_at IS NULL
+       OR r.invalid_at > datetime()
+    RETURN e1.name as from,
+           e2.name as to,
+           r.type as type,
+           r.fact as fact,
+           r.created_at as created_at,
+           r.valid_at as valid_at
+    """
+
+    case Memgraph.query(cypher, %{graph_id: graph_id}) do
+      {:ok, relations} -> {:ok, relations}
+      error -> error
+    end
+  end
+
+  @spec get_historical_relations(String.t()) :: {:ok, [map()]} | {:error, term()}
+  def get_historical_relations(graph_id) do
+    cypher = """
+    MATCH (g:Graph {id: $graph_id})-[:HAS_ENTITY]->(e1:Entity)-[r:RELATES]->(e2:Entity)
+    WHERE r.invalid_at IS NOT NULL
+       OR r.expired_at IS NOT NULL
+    RETURN e1.name as from,
+           e2.name as to,
+           r.type as type,
+           r.fact as fact,
+           r.created_at as created_at,
+           r.valid_at as valid_at,
+           r.invalid_at as invalid_at,
+           r.expired_at as expired_at
+    ORDER BY r.created_at DESC
+    """
+
+    case Memgraph.query(cypher, %{graph_id: graph_id}) do
+      {:ok, relations} -> {:ok, relations}
+      error -> error
+    end
+  end
+
+  @spec get_relations_as_of(String.t(), DateTime.t()) :: {:ok, [map()]} | {:error, term()}
+  def get_relations_as_of(graph_id, datetime) do
+    datetime_str = DateTime.to_iso8601(datetime)
+
+    cypher = """
+    MATCH (g:Graph {id: $graph_id})-[:HAS_ENTITY]->(e1:Entity)-[r:RELATES]->(e2:Entity)
+    WHERE r.valid_at <= datetime($as_of)
+      AND (r.invalid_at IS NULL OR r.invalid_at > datetime($as_of))
+    RETURN e1.name as from,
+           e2.name as to,
+           r.type as type,
+           r.fact as fact,
+           r.valid_at as valid_at
+    """
+
+    case Memgraph.query(cypher, %{graph_id: graph_id, as_of: datetime_str}) do
       {:ok, relations} -> {:ok, relations}
       error -> error
     end

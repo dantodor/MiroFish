@@ -153,6 +153,111 @@ defmodule Miroex.Reports.ReportLogger do
   end
 
   @doc """
+  Log a structured step in the report generation process.
+
+  Similar to Python's step logging for debugging and replay.
+  """
+  @spec log_step(String.t(), non_neg_integer(), String.t(), map()) :: :ok
+  def log_step(report_id, step_number, step_name, details) do
+    log_event(report_id, %{
+      type: "step",
+      step_number: step_number,
+      step_name: step_name,
+      details: details
+    })
+  end
+
+  @doc """
+  Log paragraph-level content generation.
+
+  For detailed tracking of section generation.
+  """
+  @spec log_paragraph(String.t(), String.t(), non_neg_integer(), non_neg_integer(), String.t()) ::
+          :ok
+  def log_paragraph(report_id, section_title, section_index, paragraph_index, content) do
+    log_event(report_id, %{
+      type: "paragraph",
+      section_title: section_title,
+      section_index: section_index,
+      paragraph_index: paragraph_index,
+      content: String.slice(content, 0, 2000),
+      content_length: String.length(content)
+    })
+  end
+
+  @doc """
+  Export logs to a JSON file for easier analysis.
+  """
+  @spec export_logs(String.t(), String.t()) :: :ok | {:error, term()}
+  def export_logs(report_id, output_path) do
+    with {:ok, logs} <- get_logs(report_id) do
+      json = Jason.encode!(logs, pretty: true)
+      File.write(output_path, json)
+    end
+  end
+
+  @doc """
+  Get statistics about the report generation process.
+  """
+  @spec get_report_stats(String.t()) :: {:ok, map()} | {:error, term()}
+  def get_report_stats(report_id) do
+    with {:ok, logs} <- get_logs(report_id) do
+      stats = calculate_stats(logs)
+      {:ok, stats}
+    end
+  end
+
+  defp calculate_stats(logs) do
+    events_by_type = Enum.group_by(logs, fn log -> log["event"]["type"] end)
+
+    tool_calls = Map.get(events_by_type, "tool_call", [])
+    llm_responses = Map.get(events_by_type, "llm_response", [])
+    sections = Map.get(events_by_type, "section_complete", [])
+    errors = Map.get(events_by_type, "error", [])
+
+    %{
+      total_events: length(logs),
+      tool_calls: length(tool_calls),
+      llm_responses: length(llm_responses),
+      sections_generated: length(sections),
+      errors: length(errors),
+      tools_used: get_tools_used(tool_calls),
+      avg_response_length: calculate_avg_length(llm_responses),
+      total_content_length: calculate_total_content_length(sections)
+    }
+  end
+
+  defp get_tools_used(tool_calls) do
+    tool_calls
+    |> Enum.map(fn log -> log["event"]["tool"] end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  defp calculate_avg_length(responses) do
+    lengths =
+      responses
+      |> Enum.map(fn log ->
+        content = log["event"]["content"] || ""
+        String.length(content)
+      end)
+
+    if length(lengths) > 0 do
+      Enum.sum(lengths) / length(lengths)
+    else
+      0
+    end
+  end
+
+  defp calculate_total_content_length(sections) do
+    sections
+    |> Enum.map(fn log ->
+      log["event"]["content_length"] || 0
+    end)
+    |> Enum.sum()
+  end
+
+  @doc """
   Get all log entries for a report.
   """
   @spec get_logs(String.t()) :: {:ok, [map()]} | {:error, term()}

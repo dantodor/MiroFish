@@ -1,0 +1,1 @@
+{"timestamp":"2026-03-23T16:30:49.881220Z","event":{"error":"\"%KeyError{key: :index, term: %Miroex.Reports.OutlinePlanner.Section{title: \\\"Prediction Scenario and Core Findings\\\", description: \\\"Overview of predicted events and key outcomes\\\"}, message: nil}\"","type":"error","section_title":null}}

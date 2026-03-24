@@ -1,0 +1,2 @@
+please do a gap/comparative analysis between the current application and the Elixir application found in @miroex/ . The idea is we want to replicate the functionality of the python app in elixir, so your analysis should cover gaps in the Elixir app. For now, please ignore the fact that not all the tests in the Elixir app are passing, we will fix that later. focus on the application logic itself.
+

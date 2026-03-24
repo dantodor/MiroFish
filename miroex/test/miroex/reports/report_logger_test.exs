@@ -140,4 +140,53 @@ defmodule Miroex.Reports.ReportLoggerTest do
       assert hd(responses)["event"]["content"] == "first response"
     end
   end
+
+  describe "log_step/4" do
+    test "logs step with details" do
+      :ok = ReportLogger.log_step("test_report_step", 1, "Planning", %{round: 1})
+
+      {:ok, logs} = ReportLogger.get_logs("test_report_step")
+      assert length(logs) == 1
+      assert hd(logs)["event"]["type"] == "step"
+      assert hd(logs)["event"]["step_number"] == 1
+      assert hd(logs)["event"]["step_name"] == "Planning"
+    end
+  end
+
+  describe "log_paragraph/5" do
+    test "logs paragraph generation" do
+      :ok = ReportLogger.log_paragraph("test_report_para", "Section 1", 0, 0, "Paragraph content")
+
+      {:ok, logs} = ReportLogger.get_logs("test_report_para")
+      assert length(logs) == 1
+      assert hd(logs)["event"]["type"] == "paragraph"
+      assert hd(logs)["event"]["paragraph_index"] == 0
+    end
+  end
+
+  describe "get_report_stats/1" do
+    test "calculates report statistics" do
+      report_id = "test_report_stats"
+
+      ReportLogger.log_tool_call(report_id, "tool1", %{})
+      ReportLogger.log_tool_call(report_id, "tool2", %{})
+      ReportLogger.log_llm_response(report_id, "response")
+      ReportLogger.log_section_complete(report_id, "Section", 0, "Content")
+
+      {:ok, stats} = ReportLogger.get_report_stats(report_id)
+
+      assert stats.total_events == 4
+      assert stats.tool_calls == 2
+      assert stats.llm_responses == 1
+      assert stats.sections_generated == 1
+      assert "tool1" in stats.tools_used
+      assert "tool2" in stats.tools_used
+    end
+
+    test "returns zero stats for empty report" do
+      {:ok, stats} = ReportLogger.get_report_stats("nonexistent_report")
+      assert stats.total_events == 0
+      assert stats.tool_calls == 0
+    end
+  end
 end

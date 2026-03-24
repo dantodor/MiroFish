@@ -144,12 +144,19 @@ defmodule Miroex.Graph.GraphBuilder do
   end
 
   defp store_relations(_graph_id, relations) do
+    now = DateTime.utc_now()
+
     relations
     |> Enum.each(fn rel ->
       cypher = """
       MATCH (e1:Entity {name: $from, type: $from_type})
       MATCH (e2:Entity {name: $to, type: $to_type})
-      MERGE (e1)-[r:RELATES {type: $rel_type}]->(e2)
+      MERGE (e1)-[r:RELATES {
+        type: $rel_type,
+        fact: $fact,
+        created_at: datetime($created_at),
+        valid_at: datetime($valid_at)
+      }]->(e2)
       """
 
       Memgraph.query(cypher, %{
@@ -157,7 +164,10 @@ defmodule Miroex.Graph.GraphBuilder do
         from_type: rel["from_type"] || "UNKNOWN",
         to: rel["to"],
         to_type: rel["to_type"] || "UNKNOWN",
-        rel_type: rel["type"]
+        rel_type: rel["type"],
+        fact: rel["fact"] || "#{rel["from"]} #{rel["type"]} #{rel["to"]}",
+        created_at: DateTime.to_iso8601(now),
+        valid_at: DateTime.to_iso8601(now)
       })
     end)
   end

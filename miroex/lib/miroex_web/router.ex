@@ -21,6 +21,7 @@ defmodule MiroexWeb.Router do
     pipe_through(:api)
 
     post("/simulation/:id/interview", SimulationController, :interview_agent)
+    post("/simulation/:id/interview/batch", SimulationController, :batch_interview)
   end
 
   scope "/", MiroexWeb do
@@ -79,6 +80,19 @@ defmodule MiroexWeb.Router do
       live("/projects/new", ProjectLive.Index, :new)
       live("/projects/:project_id", ProjectLive.Show, :show)
       live("/projects/:project_id/simulation/:simulation_id", SimulationLive.Show, :show)
+
+      live(
+        "/projects/:project_id/simulation/:simulation_id/interview",
+        InterviewLive.Index,
+        :index
+      )
+
+      live(
+        "/projects/:project_id/simulation/:simulation_id/interview/conduct",
+        InterviewLive.Show,
+        :show
+      )
+
       live("/reports/:report_id", ReportLive.Show, :show)
       live("/interaction/:report_id", InteractionLive.Chat, :chat)
     end
